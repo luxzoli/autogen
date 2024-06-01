@@ -43,7 +43,7 @@ else:
     ERROR = None
 
 try:
-    from autogen.oai.gemini import GeminiClient
+    from autogen.oai.gemini import GeminiClient, GenAIGeminiClient, VertexAIGeminiClient
 
     gemini_import_exception: Optional[ImportError] = None
 except ImportError as e:
@@ -435,7 +435,10 @@ class OpenAIWrapper:
             elif api_type is not None and api_type.startswith("google"):
                 if gemini_import_exception:
                     raise ImportError("Please install `google-generativeai` to use Google OpenAI API.")
-                client = GeminiClient(**openai_config)
+                if "api_key" in openai_config:
+                    client = GenAIGeminiClient(**openai_config)
+                else:
+                    client = VertexAIGeminiClient(**openai_config)
                 self._clients.append(client)
             else:
                 client = OpenAI(**openai_config)

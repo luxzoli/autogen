@@ -5,7 +5,7 @@ import pytest
 try:
     from google.api_core.exceptions import InternalServerError
 
-    from autogen.oai.gemini import GeminiClient
+    from autogen.oai.gemini import GeminiClient, GenAIGeminiClient, VertexAIGeminiClient
 
     skip = False
 except ImportError:
@@ -30,21 +30,21 @@ def mock_response():
 
 @pytest.fixture
 def gemini_client():
-    return GeminiClient(api_key="fake_api_key")
+    return GenAIGeminiClient(api_key="fake_api_key")
 
 
 # Test compute location initialization and configuration
 @pytest.mark.skipif(skip, reason="Google GenAI dependency is not installed")
 def test_compute_location_initialization():
     with pytest.raises(AssertionError):
-        GeminiClient(
+        GenAIGeminiClient(
             api_key="fake_api_key", location="us-west1"
         )  # Should raise an AssertionError due to specifying API key and compute location
 
 
 @pytest.fixture
 def gemini_google_auth_default_client():
-    return GeminiClient()
+    return VertexAIGeminiClient()
 
 
 @pytest.mark.skipif(skip, reason="Google GenAI dependency is not installed")
