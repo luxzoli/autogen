@@ -103,6 +103,9 @@ class GeminiClient(ABC):
 
 
 class VertexAIGeminiClient(GeminiClient):
+    """ Client for Google's Gemini API via VertexAI. 
+    This client enables enhanced authentication methods like service account key files and also personal Google Cloud accounts.
+    """
 
     def initialize_vartexai(self, **params):
         if "google_application_credentials" in params:
@@ -302,6 +305,8 @@ class VertexAIGeminiClient(GeminiClient):
 
 
 class GenAIGeminiClient(GeminiClient):
+    """Client for Google's Gemini API provided by the Google Generative Language API.
+    """
     def __init__(self, **kwargs):
         self.api_key = kwargs.get("api_key", None)
         assert ("project_id" not in kwargs) and (
