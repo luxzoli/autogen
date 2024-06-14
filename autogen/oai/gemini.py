@@ -171,8 +171,13 @@ class GeminiClient:
             for autogen_term, gemini_term in self.PARAMS_MAPPING.items()
             if autogen_term in params
         }
-        safety_settings = params.get("safety_settings", {})
-        vertexai_safety_settings = GeminiClient._to_vertexai_safety_settings(safety_settings)
+        if self.use_vertexai:
+            safety_settings = GeminiClient._to_vertexai_safety_settings(
+                params.get("safety_settings", {})
+            )
+        else:
+            safety_settings = params.get("safety_settings", {})
+        
 
         if stream:
             warnings.warn(
@@ -188,7 +193,7 @@ class GeminiClient:
             gemini_messages = self._oai_messages_to_gemini_messages(messages)
             if self.use_vertexai:
                 model = GenerativeModel(
-                    model_name, generation_config=generation_config, safety_settings=vertexai_safety_settings
+                    model_name, generation_config=generation_config, safety_settings=safety_settings
                 )
             else:
                 # we use chat model by default
@@ -203,7 +208,7 @@ class GeminiClient:
                 try:
                     response = chat.send_message(gemini_messages[-1].parts[0].text, stream=stream)
                 except InternalServerError:
-                    delay = 5 * (2**attempt)
+                    delay = 5 * (2 ** attempt)
                     warnings.warn(
                         f"InternalServerError `500` occurs when calling Gemini's chat model. Retry in {delay} seconds...",
                         UserWarning,
@@ -225,7 +230,7 @@ class GeminiClient:
             # B. handle the vision model
             if self.use_vertexai:
                 model = GenerativeModel(
-                    model_name, generation_config=generation_config, safety_settings=vertexai_safety_settings
+                    model_name, generation_config=generation_config, safety_settings=safety_settings
                 )
             else:
                 model = genai.GenerativeModel(
@@ -381,21 +386,28 @@ class GeminiClient:
 
     @staticmethod
     def _to_vertexai_safety_settings(safety_settings):
-        vertexai_safety_settings = []
-        for safety_setting in safety_settings:
-            if safety_setting["category"] not in VertexAIHarmCategory.__members__:
-                invalid_category = safety_setting["category"]
-                logger.error(f"Safety setting category {invalid_category} is invalid")
-            elif safety_setting["threshold"] not in VertexAIHarmBlockThreshold.__members__:
-                invalid_threshold = safety_setting["threshold"]
-                logger.error(f"Safety threshold {invalid_threshold} is invalid")
-            else:
-                vertexai_safety_setting = VertexAISafetySetting(
-                    category=safety_setting["category"],
-                    threshold=safety_setting["threshold"],
-                )
-                vertexai_safety_settings.append(vertexai_safety_setting)
-        return vertexai_safety_settings
+        """Convert safety settings to VertexAI format if needed, 
+        like when specifying them in the OAI_CONFIG_LIST
+        """
+        if (type(safety_settings) == list) and all(
+            [type(safety_setting) == dict] for safety_setting in safety_settings
+        ):
+            vertexai_safety_settings = []
+            for safety_setting in safety_settings:
+                if safety_setting["category"] not in VertexAIHarmCategory.__members__:
+                    invalid_category = safety_setting["category"]
+                    logger.error(f"Safety setting category {invalid_category} is invalid")
+                elif safety_setting["threshold"] not in VertexAIHarmBlockThreshold.__members__:
+                    invalid_threshold = safety_setting["threshold"]
+                    logger.error(f"Safety threshold {invalid_threshold} is invalid")
+                else:
+                    vertexai_safety_setting = VertexAISafetySetting(
+                        category=safety_setting["category"], threshold=safety_setting["threshold"],
+                    )
+                    vertexai_safety_settings.append(vertexai_safety_setting)
+            return vertexai_safety_settings
+        else:
+            return safety_settings
 
 
 def _to_pil(data: str) -> Image.Image:
