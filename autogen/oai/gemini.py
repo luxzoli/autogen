@@ -78,7 +78,7 @@ class GeminiClient(ABC):
         "top_p": "top_p",
         "top_k": "top_k",
         "max_output_tokens": "max_output_tokens",
-        "system_message": "system_instructions",
+        "system_message": "system_instruction",
     }
 
     def _initialize_vartexai(self, **params):
