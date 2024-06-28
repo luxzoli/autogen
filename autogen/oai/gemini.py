@@ -175,7 +175,7 @@ class VertexAIGeminiClient(GeminiClient):
             if autogen_term in params
         }
 
-        safety_settings = GeminiClient._to_vertexai_safety_settings(params.get("safety_settings", {}))
+        safety_settings = VertexAIGeminiClient._to_vertexai_safety_settings(params.get("safety_settings", {}))
 
         if stream:
             warnings.warn(
