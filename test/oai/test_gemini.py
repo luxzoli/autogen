@@ -8,11 +8,16 @@ try:
     from vertexai.generative_models import HarmCategory as VertexAIHarmCategory
     from vertexai.generative_models import SafetySetting as VertexAISafetySetting
 
-    from autogen.oai.gemini import GeminiClient
+    from autogen.oai.gemini import GeminiClient, GenAIGeminiClient, VertexAIGeminiClient
 
     skip = False
 except ImportError:
     GeminiClient = object
+    GenAIGeminiClient = object
+    VertexAIGeminiClient = object
+    VertexAIHarmBlockThreshold = object
+    VertexAIHarmCategory = object
+    VertexAISafetySetting = object
     InternalServerError = object
     skip = True
 
@@ -36,14 +41,14 @@ def gemini_client():
     system_instruction = [
         "You are a helpful AI assistant.",
     ]
-    return GeminiClient(api_key="fake_api_key", system_instruction=system_instruction)
+    return GenAIGeminiClient(api_key="fake_api_key", system_instruction=system_instruction)
 
 
 # Test compute location initialization and configuration
 @pytest.mark.skipif(skip, reason="Google GenAI dependency is not installed")
 def test_compute_location_initialization():
     with pytest.raises(AssertionError):
-        GeminiClient(
+        GenAIGeminiClient(
             api_key="fake_api_key", location="us-west1"
         )  # Should raise an AssertionError due to specifying API key and compute location
 
@@ -53,7 +58,7 @@ def gemini_google_auth_default_client():
     system_instruction = [
         "You are a helpful AI assistant.",
     ]
-    return GeminiClient(system_instruction=system_instruction)
+    return VertexAIGeminiClient(system_instruction=system_instruction)
 
 
 @pytest.mark.skipif(skip, reason="Google GenAI dependency is not installed")
@@ -111,7 +116,7 @@ def test_vertexai_safety_setting_conversion(gemini_client):
         {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_ONLY_HIGH"},
         {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_ONLY_HIGH"},
     ]
-    converted_safety_settings = GeminiClient._to_vertexai_safety_settings(safety_settings)
+    converted_safety_settings = VertexAIGeminiClient._to_vertexai_safety_settings(safety_settings)
     harm_categories = [
         VertexAIHarmCategory.HARM_CATEGORY_HARASSMENT,
         VertexAIHarmCategory.HARM_CATEGORY_HATE_SPEECH,
