@@ -34,14 +34,13 @@ from __future__ import annotations
 import base64
 import logging
 import os
-import logging
 import random
 import re
 import time
 import warnings
+from abc import ABC, abstractmethod
 from io import BytesIO
 from typing import Any, Dict, List, Mapping, Union
-from abc import ABC, abstractmethod
 
 import google.generativeai as genai
 import requests
@@ -54,9 +53,9 @@ from openai.types.completion_usage import CompletionUsage
 from PIL import Image
 from vertexai.generative_models import Content as VertexAIContent
 from vertexai.generative_models import GenerativeModel
-from vertexai.generative_models import Part as VertexAIPart
 from vertexai.generative_models import HarmBlockThreshold as VertexAIHarmBlockThreshold
 from vertexai.generative_models import HarmCategory as VertexAIHarmCategory
+from vertexai.generative_models import Part as VertexAIPart
 from vertexai.generative_models import SafetySetting as VertexAISafetySetting
 
 logger = logging.getLogger(__name__)
