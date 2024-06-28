@@ -44,6 +44,7 @@ else:
 
 try:
     from autogen.oai.gemini import GeminiClient, GenAIGeminiClient, VertexAIGeminiClient
+
     gemini_import_exception: Optional[ImportError] = None
 except ImportError as e:
     gemini_import_exception = e
@@ -192,7 +193,9 @@ class OpenAIClient:
         """
         iostream = IOStream.get_default()
 
-        completions: Completions = self._oai_client.chat.completions if "messages" in params else self._oai_client.completions  # type: ignore [attr-defined]
+        completions: Completions = (
+            self._oai_client.chat.completions if "messages" in params else self._oai_client.completions
+        )  # type: ignore [attr-defined]
         # If streaming is enabled and has messages, then iterate over the chunks of the response.
         if params.get("stream", False) and "messages" in params:
             response_contents = [""] * params.get("n", 1)
