@@ -34,14 +34,13 @@ from __future__ import annotations
 import base64
 import logging
 import os
-import logging
 import random
 import re
 import time
 import warnings
+from abc import ABC, abstractmethod
 from io import BytesIO
 from typing import Any, Dict, List, Mapping, Union
-from abc import ABC, abstractmethod
 
 import google.generativeai as genai
 import requests
