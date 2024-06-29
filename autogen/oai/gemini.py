@@ -381,7 +381,10 @@ class VertexAIGeminiClient(GeminiClient):
         like when specifying them in the OAI_CONFIG_LIST
         """
         if isinstance(safety_settings, list) and all(
-            [isinstance(safety_setting, dict)] for safety_setting in safety_settings
+            [
+                isinstance(safety_setting, dict) and not isinstance(safety_setting, VertexAISafetySetting)
+                for safety_setting in safety_settings
+            ]
         ):
             vertexai_safety_settings = []
             for safety_setting in safety_settings:
