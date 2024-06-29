@@ -179,7 +179,6 @@ class VertexAIGeminiClient(GeminiClient):
         super()._configure_params(params=params)
         self._safety_settings = VertexAIGeminiClient._to_vertexai_safety_settings(params.get("safety_settings", {}))
 
-
     def create(self, params: Dict) -> ChatCompletion:
         self._initialize_vartexai(**params)
         self._configure_params(params=params)
