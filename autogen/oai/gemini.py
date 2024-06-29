@@ -117,6 +117,83 @@ class GeminiClient(ABC):
             if autogen_term in params
         }
 
+        if self._stream:
+            warnings.warn(
+                "Streaming is not supported for Gemini yet, and it will have no effect. Please set stream=False.",
+                UserWarning,
+            )
+
+        if self._n_response > 1:
+            warnings.warn("Gemini only supports `n=1` for now. We only generate one response.", UserWarning)
+
+    def _execute_text_chat(
+        self, model: Union[genai.GenerativeModel, GenerativeModel], messages: list[dict[str, Any]]
+    ) -> List[Any]:
+        gemini_messages = self._oai_messages_to_gemini_messages(messages)
+        chat = model.start_chat(history=gemini_messages[:-1])
+        max_retries = 5
+        for attempt in range(max_retries):
+            ans = None
+            try:
+                response = chat.send_message(gemini_messages[-1].parts, stream=self._stream)
+            except InternalServerError:
+                delay = 5 * (2**attempt)
+                warnings.warn(
+                    f"InternalServerError `500` occurs when calling Gemini's chat model. Retry in {delay} seconds...",
+                    UserWarning,
+                )
+                time.sleep(delay)
+            except Exception as e:
+                raise RuntimeError(f"Google GenAI exception occurred while calling Gemini API: {e}")
+            else:
+                # `ans = response.text` is unstable. Use the following code instead.
+                ans: str = chat.history[-1].parts[0].text
+                break
+
+        if ans is None:
+            raise RuntimeError(f"Fail to get response from Google AI after retrying {attempt + 1} times.")
+
+        prompt_tokens = model.count_tokens(chat.history[:-1]).total_tokens
+        completion_tokens = model.count_tokens(ans).total_tokens
+        return response, ans, prompt_tokens, completion_tokens
+
+    def _execute_multimodal_chat(self, messages, model):
+        # Gemini's vision model does not support chat history yet
+        # chat = model.start_chat(history=gemini_messages[:-1])
+        # response = chat.send_message(gemini_messages[-1])
+        user_message = self._oai_content_to_gemini_content(messages[-1]["content"])
+        if len(messages) > 2:
+            warnings.warn(
+                "Warning: Gemini's vision model does not support chat history yet.",
+                "We only use the last message as the prompt.",
+                UserWarning,
+            )
+
+        response = model.generate_content(user_message, stream=self._stream)
+        prompt_tokens = model.count_tokens(user_message).total_tokens
+        # ans = response.text
+        return response, prompt_tokens
+
+    def _convert_output_to_oai_format(self, ans, prompt_tokens, completion_tokens) -> ChatCompletion:
+        message = ChatCompletionMessage(role="assistant", content=ans, function_call=None, tool_calls=None)
+        choices = [Choice(finish_reason="stop", index=0, message=message)]
+
+        response_oai = ChatCompletion(
+            id=str(random.randint(0, 1000)),
+            model=self._model_name,
+            created=int(time.time()),
+            object="chat.completion",
+            choices=choices,
+            usage=CompletionUsage(
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                total_tokens=prompt_tokens + completion_tokens,
+            ),
+            cost=calculate_gemini_cost(prompt_tokens, completion_tokens, self._model_name),
+        )
+
+        return response_oai
+
     def message_retrieval(self, response) -> List:
         """
         Retrieve and return a list of strings or a list of Choice.Message from the response.
@@ -179,23 +256,18 @@ class VertexAIGeminiClient(GeminiClient):
         super()._configure_params(params=params)
         self._safety_settings = VertexAIGeminiClient._to_vertexai_safety_settings(params.get("safety_settings", {}))
 
+    def _execute_multimodal_chat(self, messages, model):
+        response, prompt_tokens = super()._execute_multiomodal_chat(messages, model)
+        ans: str = response.candidates[0].content.parts[0].text
+        completion_tokens = model.count_tokens(ans).total_tokens
+        return response, ans, prompt_tokens, completion_tokens
+
     def create(self, params: Dict) -> ChatCompletion:
         self._initialize_vartexai(**params)
         self._configure_params(params=params)
 
-        if self._stream:
-            warnings.warn(
-                "Streaming is not supported for Gemini yet, and it will have no effect. Please set stream=False.",
-                UserWarning,
-            )
-
-        if self._n_response > 1:
-            warnings.warn("Gemini only supports `n=1` for now. We only generate one response.", UserWarning)
-
         if "vision" not in self._model_name:
             # A. create and call the chat model.
-            gemini_messages = self._oai_messages_to_gemini_messages(self._messages)
-
             model = GenerativeModel(
                 self._model_name,
                 generation_config=self._generation_config,
@@ -203,73 +275,16 @@ class VertexAIGeminiClient(GeminiClient):
                 system_instruction=self._system_instruction,
             )
 
-            chat = model.start_chat(history=gemini_messages[:-1])
-            max_retries = 5
-            for attempt in range(max_retries):
-                ans = None
-                try:
-                    response = chat.send_message(gemini_messages[-1].parts, stream=self._stream)
-                except InternalServerError:
-                    delay = 5 * (2**attempt)
-                    warnings.warn(
-                        f"InternalServerError `500` occurs when calling Gemini's chat model. Retry in {delay} seconds...",
-                        UserWarning,
-                    )
-                    time.sleep(delay)
-                except Exception as e:
-                    raise RuntimeError(f"Google GenAI exception occurred while calling Gemini API: {e}")
-                else:
-                    # `ans = response.text` is unstable. Use the following code instead.
-                    ans: str = chat.history[-1].parts[0].text
-                    break
-
-            if ans is None:
-                raise RuntimeError(f"Fail to get response from Google AI after retrying {attempt + 1} times.")
-
-            prompt_tokens = model.count_tokens(chat.history[:-1]).total_tokens
-            completion_tokens = model.count_tokens(ans).total_tokens
+            response, ans, prompt_tokens, completion_tokens = self._execute_text_chat(model, self._messages)
         elif self._model_name == "gemini-pro-vision":
             # B. handle the vision model
             model = GenerativeModel(
                 self._model_name, generation_config=self._generation_config, safety_settings=self._safety_settings
             )
 
-            # Gemini's vision model does not support chat history yet
-            # chat = model.start_chat(history=gemini_messages[:-1])
-            # response = chat.send_message(gemini_messages[-1].parts)
-            user_message = self._oai_content_to_gemini_content(self._messages[-1]["content"])
-            if len(self._messages) > 2:
-                warnings.warn(
-                    "Warning: Gemini's vision model does not support chat history yet.",
-                    "We only use the last message as the prompt.",
-                    UserWarning,
-                )
+            response, ans, prompt_tokens, completion_tokens = self._execute_multimodal_chat(self._messages, model)
 
-            response = model.generate_content(user_message, stream=self._stream)
-            # ans = response.text
-
-            ans: str = response.candidates[0].content.parts[0].text
-
-            prompt_tokens = model.count_tokens(user_message).total_tokens
-            completion_tokens = model.count_tokens(ans).total_tokens
-
-        # 3. convert output
-        message = ChatCompletionMessage(role="assistant", content=ans, function_call=None, tool_calls=None)
-        choices = [Choice(finish_reason="stop", index=0, message=message)]
-
-        response_oai = ChatCompletion(
-            id=str(random.randint(0, 1000)),
-            model=self._model_name,
-            created=int(time.time()),
-            object="chat.completion",
-            choices=choices,
-            usage=CompletionUsage(
-                prompt_tokens=prompt_tokens,
-                completion_tokens=completion_tokens,
-                total_tokens=prompt_tokens + completion_tokens,
-            ),
-            cost=calculate_gemini_cost(prompt_tokens, completion_tokens, self._model_name),
-        )
+        response_oai = self._convert_output_to_oai_format(ans, prompt_tokens, completion_tokens)
 
         return response_oai
 
@@ -410,21 +425,17 @@ class GenAIGeminiClient(GeminiClient):
         super()._configure_params(params=params)
         self._safety_settings = params.get("safety_settings", {})
 
+    def _execute_multimodal_chat(self, messages, model):
+        response, prompt_tokens = super()._execute_multimodal_chat(messages, model)
+        ans: str = response._result.candidates[0].content.parts[0].text
+        completion_tokens = model.count_tokens(ans).total_tokens
+        return response, ans, prompt_tokens, completion_tokens
+
     def create(self, params: Dict) -> ChatCompletion:
         self._configure_params(params=params)
 
-        if self._stream:
-            warnings.warn(
-                "Streaming is not supported for Gemini yet, and it will have no effect. Please set stream=False.",
-                UserWarning,
-            )
-
-        if self._n_response > 1:
-            warnings.warn("Gemini only supports `n=1` for now. We only generate one response.", UserWarning)
-
         if "vision" not in self._model_name:
             # A. create and call the chat model.
-            gemini_messages = self._oai_messages_to_gemini_messages(self._messages)
             # we use chat model by default
             model = genai.GenerativeModel(
                 self._model_name,
@@ -433,72 +444,18 @@ class GenAIGeminiClient(GeminiClient):
                 system_instruction=self._system_instruction,
             )
             genai.configure(api_key=self.api_key)
-            chat = model.start_chat(history=gemini_messages[:-1])
-            max_retries = 5
-            for attempt in range(max_retries):
-                ans = None
-                try:
-                    response = chat.send_message(gemini_messages[-1].parts, stream=self._stream)
-                except InternalServerError:
-                    delay = 5 * (2**attempt)
-                    warnings.warn(
-                        f"InternalServerError `500` occurs when calling Gemini's chat model. Retry in {delay} seconds...",
-                        UserWarning,
-                    )
-                    time.sleep(delay)
-                except Exception as e:
-                    raise RuntimeError(f"Google GenAI exception occurred while calling Gemini API: {e}")
-                else:
-                    # `ans = response.text` is unstable. Use the following code instead.
-                    ans: str = chat.history[-1].parts[0].text
-                    break
 
-            if ans is None:
-                raise RuntimeError(f"Fail to get response from Google AI after retrying {attempt + 1} times.")
+            response, ans, prompt_tokens, completion_tokens = self._execute_text_chat(model, self._messages)
 
-            prompt_tokens = model.count_tokens(chat.history[:-1]).total_tokens
-            completion_tokens = model.count_tokens(ans).total_tokens
         elif self._model_name == "gemini-pro-vision":
             # B. handle the vision model
             model = genai.GenerativeModel(
                 self._model_name, generation_config=self._generation_config, safety_settings=self._safety_settings
             )
             genai.configure(api_key=self.api_key)
-            # Gemini's vision model does not support chat history yet
-            # chat = model.start_chat(history=gemini_messages[:-1])
-            # response = chat.send_message(gemini_messages[-1].parts)
-            user_message = self._oai_content_to_gemini_content(self._messages[-1]["content"])
-            if len(self._messages) > 2:
-                warnings.warn(
-                    "Warning: Gemini's vision model does not support chat history yet.",
-                    "We only use the last message as the prompt.",
-                    UserWarning,
-                )
+            response, ans, prompt_tokens, completion_tokens = self._execute_multimodal_chat(self._messages, model)
 
-            response = model.generate_content(user_message, stream=self._stream)
-            # ans = response.text
-            ans: str = response._result.candidates[0].content.parts[0].text
-
-            prompt_tokens = model.count_tokens(user_message).total_tokens
-            completion_tokens = model.count_tokens(ans).total_tokens
-
-        # 3. convert output
-        message = ChatCompletionMessage(role="assistant", content=ans, function_call=None, tool_calls=None)
-        choices = [Choice(finish_reason="stop", index=0, message=message)]
-
-        response_oai = ChatCompletion(
-            id=str(random.randint(0, 1000)),
-            model=self._model_name,
-            created=int(time.time()),
-            object="chat.completion",
-            choices=choices,
-            usage=CompletionUsage(
-                prompt_tokens=prompt_tokens,
-                completion_tokens=completion_tokens,
-                total_tokens=prompt_tokens + completion_tokens,
-            ),
-            cost=calculate_gemini_cost(prompt_tokens, completion_tokens, self._model_name),
-        )
+        response_oai = self._convert_output_to_oai_format(ans, prompt_tokens, completion_tokens)
 
         return response_oai
 
