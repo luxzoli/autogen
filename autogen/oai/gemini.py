@@ -40,7 +40,7 @@ import time
 import warnings
 from abc import ABC, abstractmethod
 from io import BytesIO
-from typing import Any, Dict, List, Mapping, Union
+from typing import Any, Dict, List, Mapping, Tuple, Union
 
 import google.generativeai as genai
 import requests
@@ -96,6 +96,7 @@ class GeminiClient(ABC):
     def __init__(self, **kwargs):
         pass
 
+    @abstractmethod
     def _configure_params(self, params: Dict):
         self._model_name = params.get("model", "gemini-pro")
         if not self._model_name:
@@ -128,7 +129,7 @@ class GeminiClient(ABC):
 
     def _execute_text_chat(
         self, model: Union[genai.GenerativeModel, GenerativeModel], messages: list[dict[str, Any]]
-    ) -> List[Any]:
+    ) -> Tuple[Any]:
         gemini_messages = self._oai_messages_to_gemini_messages(messages)
         chat = model.start_chat(history=gemini_messages[:-1])
         max_retries = 5
@@ -157,7 +158,10 @@ class GeminiClient(ABC):
         completion_tokens = model.count_tokens(ans).total_tokens
         return response, ans, prompt_tokens, completion_tokens
 
-    def _execute_multimodal_chat(self, messages, model):
+    @abstractmethod
+    def _execute_multimodal_chat(
+        self, model: Union[genai.GenerativeModel, GenerativeModel], messages: list[dict[str, Any]]
+    ) -> Tuple[Any]:
         # Gemini's vision model does not support chat history yet
         # chat = model.start_chat(history=gemini_messages[:-1])
         # response = chat.send_message(gemini_messages[-1])
@@ -256,8 +260,10 @@ class VertexAIGeminiClient(GeminiClient):
         super()._configure_params(params=params)
         self._safety_settings = VertexAIGeminiClient._to_vertexai_safety_settings(params.get("safety_settings", {}))
 
-    def _execute_multimodal_chat(self, messages, model):
-        response, prompt_tokens = super()._execute_multimodal_chat(messages, model)
+    def _execute_multimodal_chat(
+        self, model: Union[genai.GenerativeModel, GenerativeModel], messages: list[dict[str, Any]]
+    ) -> Tuple[Any]:
+        response, prompt_tokens = super()._execute_multimodal_chat(model, messages)
         ans: str = response.candidates[0].content.parts[0].text
         completion_tokens = model.count_tokens(ans).total_tokens
         return response, ans, prompt_tokens, completion_tokens
@@ -282,7 +288,7 @@ class VertexAIGeminiClient(GeminiClient):
                 self._model_name, generation_config=self._generation_config, safety_settings=self._safety_settings
             )
 
-            response, ans, prompt_tokens, completion_tokens = self._execute_multimodal_chat(self._messages, model)
+            response, ans, prompt_tokens, completion_tokens = self._execute_multimodal_chat(model, self._messages)
 
         response_oai = self._convert_output_to_oai_format(ans, prompt_tokens, completion_tokens)
 
@@ -425,8 +431,10 @@ class GenAIGeminiClient(GeminiClient):
         super()._configure_params(params=params)
         self._safety_settings = params.get("safety_settings", {})
 
-    def _execute_multimodal_chat(self, messages, model):
-        response, prompt_tokens = super()._execute_multimodal_chat(messages, model)
+    def _execute_multimodal_chat(
+        self, model: Union[genai.GenerativeModel, GenerativeModel], messages: list[dict[str, Any]]
+    ) -> Tuple[Any]:
+        response, prompt_tokens = super()._execute_multimodal_chat(model, messages)
         ans: str = response._result.candidates[0].content.parts[0].text
         completion_tokens = model.count_tokens(ans).total_tokens
         return response, ans, prompt_tokens, completion_tokens
@@ -453,7 +461,7 @@ class GenAIGeminiClient(GeminiClient):
                 self._model_name, generation_config=self._generation_config, safety_settings=self._safety_settings
             )
             genai.configure(api_key=self.api_key)
-            response, ans, prompt_tokens, completion_tokens = self._execute_multimodal_chat(self._messages, model)
+            response, ans, prompt_tokens, completion_tokens = self._execute_multimodal_chat(model, self._messages)
 
         response_oai = self._convert_output_to_oai_format(ans, prompt_tokens, completion_tokens)
 
