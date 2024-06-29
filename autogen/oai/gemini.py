@@ -96,6 +96,27 @@ class GeminiClient(ABC):
     def __init__(self, **kwargs):
         pass
 
+    def _configure_params(self, params: Dict):
+        self._model_name = params.get("model", "gemini-pro")
+        if not self._model_name:
+            raise ValueError(
+                "Please provide a model name for the Gemini Client. "
+                "You can configure it in the OAI Config List file. "
+                "See this [LLM configuration tutorial](https://microsoft.github.io/autogen/docs/topics/llm_configuration/) for more details."
+            )
+
+        params.get("api_type", "google")  # not used
+        self._messages = params.get("messages", [])
+        self._stream = params.get("stream", False)
+        self._n_response = params.get("n", 1)
+        self._system_instruction = params.get("system_instruction", None)
+
+        self._generation_config = {
+            gemini_term: params[autogen_term]
+            for autogen_term, gemini_term in self.PARAMS_MAPPING.items()
+            if autogen_term in params
+        }
+
     def message_retrieval(self, response) -> List:
         """
         Retrieve and return a list of strings or a list of Choice.Message from the response.
@@ -153,48 +174,34 @@ class VertexAIGeminiClient(GeminiClient):
         """
         self._initialize_vartexai(**kwargs)
 
+    def _configure_params(self, params: Dict):
+        self._initialize_vartexai(**params)
+        super()._configure_params(params=params)
+        self._safety_settings = VertexAIGeminiClient._to_vertexai_safety_settings(params.get("safety_settings", {}))
+
+
     def create(self, params: Dict) -> ChatCompletion:
         self._initialize_vartexai(**params)
-        model_name = params.get("model", "gemini-pro")
-        if not model_name:
-            raise ValueError(
-                "Please provide a model name for the Gemini Client. "
-                "You can configure it in the OAI Config List file. "
-                "See this [LLM configuration tutorial](https://microsoft.github.io/autogen/docs/topics/llm_configuration/) for more details."
-            )
+        self._configure_params(params=params)
 
-        params.get("api_type", "google")  # not used
-        messages = params.get("messages", [])
-        stream = params.get("stream", False)
-        n_response = params.get("n", 1)
-        system_instruction = params.get("system_instruction", None)
-
-        generation_config = {
-            gemini_term: params[autogen_term]
-            for autogen_term, gemini_term in self.PARAMS_MAPPING.items()
-            if autogen_term in params
-        }
-
-        safety_settings = VertexAIGeminiClient._to_vertexai_safety_settings(params.get("safety_settings", {}))
-
-        if stream:
+        if self._stream:
             warnings.warn(
                 "Streaming is not supported for Gemini yet, and it will have no effect. Please set stream=False.",
                 UserWarning,
             )
 
-        if n_response > 1:
+        if self._n_response > 1:
             warnings.warn("Gemini only supports `n=1` for now. We only generate one response.", UserWarning)
 
-        if "vision" not in model_name:
+        if "vision" not in self._model_name:
             # A. create and call the chat model.
-            gemini_messages = self._oai_messages_to_gemini_messages(messages)
+            gemini_messages = self._oai_messages_to_gemini_messages(self._messages)
 
             model = GenerativeModel(
-                model_name,
-                generation_config=generation_config,
-                safety_settings=safety_settings,
-                system_instruction=system_instruction,
+                self._model_name,
+                generation_config=self._generation_config,
+                safety_settings=self._safety_settings,
+                system_instruction=self._system_instruction,
             )
 
             chat = model.start_chat(history=gemini_messages[:-1])
@@ -202,7 +209,7 @@ class VertexAIGeminiClient(GeminiClient):
             for attempt in range(max_retries):
                 ans = None
                 try:
-                    response = chat.send_message(gemini_messages[-1].parts, stream=stream)
+                    response = chat.send_message(gemini_messages[-1].parts, stream=self._stream)
                 except InternalServerError:
                     delay = 5 * (2**attempt)
                     warnings.warn(
@@ -222,22 +229,24 @@ class VertexAIGeminiClient(GeminiClient):
 
             prompt_tokens = model.count_tokens(chat.history[:-1]).total_tokens
             completion_tokens = model.count_tokens(ans).total_tokens
-        elif model_name == "gemini-pro-vision":
+        elif self._model_name == "gemini-pro-vision":
             # B. handle the vision model
-            model = GenerativeModel(model_name, generation_config=generation_config, safety_settings=safety_settings)
+            model = GenerativeModel(
+                self._model_name, generation_config=self._generation_config, safety_settings=self._safety_settings
+            )
 
             # Gemini's vision model does not support chat history yet
             # chat = model.start_chat(history=gemini_messages[:-1])
             # response = chat.send_message(gemini_messages[-1].parts)
-            user_message = self._oai_content_to_gemini_content(messages[-1]["content"])
-            if len(messages) > 2:
+            user_message = self._oai_content_to_gemini_content(self._messages[-1]["content"])
+            if len(self._messages) > 2:
                 warnings.warn(
                     "Warning: Gemini's vision model does not support chat history yet.",
                     "We only use the last message as the prompt.",
                     UserWarning,
                 )
 
-            response = model.generate_content(user_message, stream=stream)
+            response = model.generate_content(user_message, stream=self._stream)
             # ans = response.text
 
             ans: str = response.candidates[0].content.parts[0].text
@@ -251,7 +260,7 @@ class VertexAIGeminiClient(GeminiClient):
 
         response_oai = ChatCompletion(
             id=str(random.randint(0, 1000)),
-            model=model_name,
+            model=self._model_name,
             created=int(time.time()),
             object="chat.completion",
             choices=choices,
@@ -260,7 +269,7 @@ class VertexAIGeminiClient(GeminiClient):
                 completion_tokens=completion_tokens,
                 total_tokens=prompt_tokens + completion_tokens,
             ),
-            cost=calculate_gemini_cost(prompt_tokens, completion_tokens, model_name),
+            cost=calculate_gemini_cost(prompt_tokens, completion_tokens, self._model_name),
         )
 
         return response_oai
@@ -395,49 +404,34 @@ class GenAIGeminiClient(GeminiClient):
             self.api_key
         ), "Please provide api_key in your config list entry for Gemini or set the GOOGLE_API_KEY env variable."
 
-    def create(self, params: Dict) -> ChatCompletion:
+    def _configure_params(self, params: Dict):
         assert ("project_id" not in params) and (
             "location" not in params
         ), "Google Cloud project and compute location cannot be set when using an API Key!"
-        model_name = params.get("model", "gemini-pro")
-        if not model_name:
-            raise ValueError(
-                "Please provide a model name for the Gemini Client. "
-                "You can configure it in the OAI Config List file. "
-                "See this [LLM configuration tutorial](https://microsoft.github.io/autogen/docs/topics/llm_configuration/) for more details."
-            )
+        super()._configure_params(params=params)
+        self._safety_settings = params.get("safety_settings", {})
 
-        params.get("api_type", "google")  # not used
-        messages = params.get("messages", [])
-        stream = params.get("stream", False)
-        n_response = params.get("n", 1)
-        system_instruction = params.get("system_instruction", None)
+    def create(self, params: Dict) -> ChatCompletion:
+        self._configure_params(params=params)
 
-        generation_config = {
-            gemini_term: params[autogen_term]
-            for autogen_term, gemini_term in self.PARAMS_MAPPING.items()
-            if autogen_term in params
-        }
-        safety_settings = params.get("safety_settings", {})
-
-        if stream:
+        if self._stream:
             warnings.warn(
                 "Streaming is not supported for Gemini yet, and it will have no effect. Please set stream=False.",
                 UserWarning,
             )
 
-        if n_response > 1:
+        if self._n_response > 1:
             warnings.warn("Gemini only supports `n=1` for now. We only generate one response.", UserWarning)
 
-        if "vision" not in model_name:
+        if "vision" not in self._model_name:
             # A. create and call the chat model.
-            gemini_messages = self._oai_messages_to_gemini_messages(messages)
+            gemini_messages = self._oai_messages_to_gemini_messages(self._messages)
             # we use chat model by default
             model = genai.GenerativeModel(
-                model_name,
-                generation_config=generation_config,
-                safety_settings=safety_settings,
-                system_instruction=system_instruction,
+                self._model_name,
+                generation_config=self._generation_config,
+                safety_settings=self._safety_settings,
+                system_instruction=self._system_instruction,
             )
             genai.configure(api_key=self.api_key)
             chat = model.start_chat(history=gemini_messages[:-1])
@@ -445,7 +439,7 @@ class GenAIGeminiClient(GeminiClient):
             for attempt in range(max_retries):
                 ans = None
                 try:
-                    response = chat.send_message(gemini_messages[-1].parts, stream=stream)
+                    response = chat.send_message(gemini_messages[-1].parts, stream=self._stream)
                 except InternalServerError:
                     delay = 5 * (2**attempt)
                     warnings.warn(
@@ -465,24 +459,24 @@ class GenAIGeminiClient(GeminiClient):
 
             prompt_tokens = model.count_tokens(chat.history[:-1]).total_tokens
             completion_tokens = model.count_tokens(ans).total_tokens
-        elif model_name == "gemini-pro-vision":
+        elif self._model_name == "gemini-pro-vision":
             # B. handle the vision model
             model = genai.GenerativeModel(
-                model_name, generation_config=generation_config, safety_settings=safety_settings
+                self._model_name, generation_config=self._generation_config, safety_settings=self._safety_settings
             )
             genai.configure(api_key=self.api_key)
             # Gemini's vision model does not support chat history yet
             # chat = model.start_chat(history=gemini_messages[:-1])
             # response = chat.send_message(gemini_messages[-1].parts)
-            user_message = self._oai_content_to_gemini_content(messages[-1]["content"])
-            if len(messages) > 2:
+            user_message = self._oai_content_to_gemini_content(self._messages[-1]["content"])
+            if len(self._messages) > 2:
                 warnings.warn(
                     "Warning: Gemini's vision model does not support chat history yet.",
                     "We only use the last message as the prompt.",
                     UserWarning,
                 )
 
-            response = model.generate_content(user_message, stream=stream)
+            response = model.generate_content(user_message, stream=self._stream)
             # ans = response.text
             ans: str = response._result.candidates[0].content.parts[0].text
 
@@ -495,7 +489,7 @@ class GenAIGeminiClient(GeminiClient):
 
         response_oai = ChatCompletion(
             id=str(random.randint(0, 1000)),
-            model=model_name,
+            model=self._model_name,
             created=int(time.time()),
             object="chat.completion",
             choices=choices,
@@ -504,7 +498,7 @@ class GenAIGeminiClient(GeminiClient):
                 completion_tokens=completion_tokens,
                 total_tokens=prompt_tokens + completion_tokens,
             ),
-            cost=calculate_gemini_cost(prompt_tokens, completion_tokens, model_name),
+            cost=calculate_gemini_cost(prompt_tokens, completion_tokens, self._model_name),
         )
 
         return response_oai
