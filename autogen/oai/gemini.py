@@ -257,7 +257,7 @@ class VertexAIGeminiClient(GeminiClient):
         self._safety_settings = VertexAIGeminiClient._to_vertexai_safety_settings(params.get("safety_settings", {}))
 
     def _execute_multimodal_chat(self, messages, model):
-        response, prompt_tokens = super()._execute_multiomodal_chat(messages, model)
+        response, prompt_tokens = super()._execute_multimodal_chat(messages, model)
         ans: str = response.candidates[0].content.parts[0].text
         completion_tokens = model.count_tokens(ans).total_tokens
         return response, ans, prompt_tokens, completion_tokens
