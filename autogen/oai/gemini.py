@@ -111,6 +111,7 @@ class GeminiClient(ABC):
         self._stream = params.get("stream", False)
         self._n_response = params.get("n", 1)
         self._system_instruction = params.get("system_instruction", None)
+        self._safety_settings = params.get("safety_settings", {})
 
         self._generation_config = {
             gemini_term: params[autogen_term]
@@ -136,7 +137,9 @@ class GeminiClient(ABC):
         for attempt in range(max_retries):
             ans = None
             try:
-                response = chat.send_message(gemini_messages[-1].parts, stream=self._stream)
+                response = chat.send_message(
+                    gemini_messages[-1].parts, stream=self._stream, safety_settings=self._safety_settings
+                )
             except InternalServerError:
                 delay = 5 * (2**attempt)
                 warnings.warn(
@@ -435,7 +438,6 @@ class GenAIGeminiClient(GeminiClient):
             "location" not in params
         ), "Google Cloud project and compute location cannot be set when using an API Key!"
         super()._configure_params(params=params)
-        self._safety_settings = params.get("safety_settings", {})
 
     def _execute_multimodal_chat(
         self, model: Union[genai.GenerativeModel, GenerativeModel], messages: list[dict[str, Any]]
