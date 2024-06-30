@@ -285,7 +285,10 @@ class VertexAIGeminiClient(GeminiClient):
         elif self._model_name == "gemini-pro-vision":
             # B. handle the vision model
             model = GenerativeModel(
-                self._model_name, generation_config=self._generation_config, safety_settings=self._safety_settings
+                self._model_name,
+                generation_config=self._generation_config,
+                safety_settings=self._safety_settings,
+                system_instruction=self._system_instruction,
             )
 
             response, ans, prompt_tokens, completion_tokens = self._execute_multimodal_chat(model, self._messages)
@@ -461,7 +464,10 @@ class GenAIGeminiClient(GeminiClient):
         elif self._model_name == "gemini-pro-vision":
             # B. handle the vision model
             model = genai.GenerativeModel(
-                self._model_name, generation_config=self._generation_config, safety_settings=self._safety_settings
+                self._model_name,
+                generation_config=self._generation_config,
+                safety_settings=self._safety_settings,
+                system_instruction=self._system_instruction,
             )
             genai.configure(api_key=self.api_key)
             response, ans, prompt_tokens, completion_tokens = self._execute_multimodal_chat(model, self._messages)
