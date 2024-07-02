@@ -42,21 +42,21 @@ from abc import ABC, abstractmethod
 from io import BytesIO
 from typing import Any, Dict, List, Mapping, Tuple, Union
 
-from google.auth.credentials import Credentials
 import google.generativeai as genai
 import requests
 import vertexai
 from google.ai.generativelanguage import Content, Part
 from google.api_core.exceptions import InternalServerError
+from google.auth.credentials import Credentials
 from openai.types.chat import ChatCompletion
 from openai.types.chat.chat_completion import ChatCompletionMessage, Choice
 from openai.types.completion_usage import CompletionUsage
 from PIL import Image
 from vertexai.generative_models import Content as VertexAIContent
-from vertexai.generative_models import Part as VertexAIPart
 from vertexai.generative_models import GenerativeModel
 from vertexai.generative_models import HarmBlockThreshold as VertexAIHarmBlockThreshold
 from vertexai.generative_models import HarmCategory as VertexAIHarmCategory
+from vertexai.generative_models import Part as VertexAIPart
 from vertexai.generative_models import SafetySetting as VertexAISafetySetting
 
 logger = logging.getLogger(__name__)
