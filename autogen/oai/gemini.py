@@ -42,6 +42,7 @@ from abc import ABC, abstractmethod
 from io import BytesIO
 from typing import Any, Dict, List, Mapping, Tuple, Union
 
+from google.auth.credentials import Credentials
 import google.generativeai as genai
 import requests
 import vertexai
@@ -85,10 +86,15 @@ class GeminiClient(ABC):
             # Path to JSON Keyfile
             os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = params["google_application_credentials"]
         vertexai_init_args = {}
-        if "project_id" in params:
-            vertexai_init_args["project"] = params["project_id"]
+        if "project" in params:
+            vertexai_init_args["project"] = params["project"]
         if "location" in params:
             vertexai_init_args["location"] = params["location"]
+        if "credentials" in params:
+            assert isinstance(
+                params["credentials"], Credentials
+            ), "Object type google.auth.credentials.Credentials is expected!"
+            vertexai_init_args["credentials"] = params["credentials"]
         if vertexai_init_args:
             vertexai.init(**vertexai_init_args)
 
@@ -236,8 +242,8 @@ class VertexAIGeminiClient(GeminiClient):
             # Path to JSON Keyfile
             os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = params["google_application_credentials"]
         vertexai_init_args = {}
-        if "project_id" in params:
-            vertexai_init_args["project"] = params["project_id"]
+        if "project" in params:
+            vertexai_init_args["project"] = params["project"]
         if "location" in params:
             vertexai_init_args["location"] = params["location"]
         if vertexai_init_args:
@@ -245,7 +251,7 @@ class VertexAIGeminiClient(GeminiClient):
 
     def __init__(self, **kwargs):
         """Uses the Google authentication mechanism for VertexAI in Google Cloud if no api_key is specified,
-        where project_id and location can also be passed as parameters. Service account key file can also be used.
+        where project and location can also be passed as parameters. Service account key file can also be used.
         If neither a service account key file, nor the api_key are passed, then the default credentials will be used,
         which could be a personal account if the user is already authenticated in, like in Google Cloud Shell.
 
@@ -253,7 +259,7 @@ class VertexAIGeminiClient(GeminiClient):
             google_application_credentials (str): Path to the JSON service account key file of the service account.
             Alternatively, the GOOGLE_APPLICATION_CREDENTIALS environment variable
             can also be set instead of using this argument.
-            project_id (str): Google Cloud project id
+            project (str): Google Cloud project
             location (str): Compute region to be used, like 'us-west1'.
         """
         self._initialize_vartexai(**kwargs)
@@ -425,7 +431,7 @@ class GenAIGeminiClient(GeminiClient):
         if not self.api_key:
             self.api_key = os.getenv("GOOGLE_API_KEY")
 
-        assert ("project_id" not in kwargs) and (
+        assert ("project" not in kwargs) and (
             "location" not in kwargs
         ), "Google Cloud project and compute location cannot be set when using an API Key!"
 
@@ -434,7 +440,7 @@ class GenAIGeminiClient(GeminiClient):
         ), "Please provide api_key in your config list entry for Gemini or set the GOOGLE_API_KEY env variable."
 
     def _configure_params(self, params: Dict):
-        assert ("project_id" not in params) and (
+        assert ("project" not in params) and (
             "location" not in params
         ), "Google Cloud project and compute location cannot be set when using an API Key!"
         super()._configure_params(params=params)

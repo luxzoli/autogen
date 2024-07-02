@@ -38,10 +38,10 @@ def mock_response():
 
 @pytest.fixture
 def gemini_client():
-    system_instruction = [
+    system_message = [
         "You are a helpful AI assistant.",
     ]
-    return GenAIGeminiClient(api_key="fake_api_key", system_instruction=system_instruction)
+    return GenAIGeminiClient(api_key="fake_api_key", system_message=system_message)
 
 
 # Test compute location initialization and configuration
@@ -55,15 +55,24 @@ def test_compute_location_initialization():
 
 @pytest.fixture
 def gemini_google_auth_default_client():
-    system_instruction = [
+    system_message = [
         "You are a helpful AI assistant.",
     ]
-    return VertexAIGeminiClient(system_instruction=system_instruction)
+    return VertexAIGeminiClient(system_message=system_message)
 
 
 @pytest.mark.skipif(skip, reason="Google GenAI dependency is not installed")
 def test_valid_initialization(gemini_client):
     assert gemini_client.api_key == "fake_api_key", "API Key should be correctly set"
+
+
+# Test project initialization and configuration
+@pytest.mark.skipif(skip, reason="Google GenAI dependency is not installed")
+def test_project_initialization():
+    with pytest.raises(AssertionError):
+        GeminiClient(
+            api_key="fake_api_key", project="fake-project-id"
+        )  # Should raise an AssertionError due to specifying API key and compute location
 
 
 @pytest.mark.skipif(skip, reason="Google GenAI dependency is not installed")
@@ -180,8 +189,6 @@ def test_vertexai_safety_setting_list(gemini_client):
         VertexAISafetySetting(category=category, threshold=VertexAIHarmBlockThreshold.BLOCK_ONLY_HIGH)
         for category in harm_categories
     ]
-
-    print(safety_settings)
 
     converted_safety_settings = VertexAIGeminiClient._to_vertexai_safety_settings(safety_settings)
 
