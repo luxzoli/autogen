@@ -53,6 +53,15 @@ def test_compute_location_initialization():
         )  # Should raise an AssertionError due to specifying API key and compute location
 
 
+# Test project initialization and configuration
+@pytest.mark.skipif(skip, reason="Google GenAI dependency is not installed")
+def test_project_initialization():
+    with pytest.raises(AssertionError):
+        GenAIGeminiClient(
+            api_key="fake_api_key", project="fake-project-id"
+        )  # Should raise an AssertionError due to specifying API key and compute location
+
+
 @pytest.fixture
 def gemini_google_auth_default_client():
     system_message = [
@@ -64,15 +73,6 @@ def gemini_google_auth_default_client():
 @pytest.mark.skipif(skip, reason="Google GenAI dependency is not installed")
 def test_valid_initialization(gemini_client):
     assert gemini_client.api_key == "fake_api_key", "API Key should be correctly set"
-
-
-# Test project initialization and configuration
-@pytest.mark.skipif(skip, reason="Google GenAI dependency is not installed")
-def test_project_initialization():
-    with pytest.raises(AssertionError):
-        GeminiClient(
-            api_key="fake_api_key", project="fake-project-id"
-        )  # Should raise an AssertionError due to specifying API key and compute location
 
 
 @pytest.mark.skipif(skip, reason="Google GenAI dependency is not installed")
