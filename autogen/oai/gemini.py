@@ -187,7 +187,7 @@ class GeminiClient(ABC):
         # ans = response.text
         return response, prompt_tokens
 
-    def _convert_output_to_oai_format(self, ans, prompt_tokens, completion_tokens) -> ChatCompletion:
+    def _convert_output_to_oai_format(self, ans: str, prompt_tokens: int, completion_tokens: int) -> ChatCompletion:
         message = ChatCompletionMessage(role="assistant", content=ans, function_call=None, tool_calls=None)
         choices = [Choice(finish_reason="stop", index=0, message=message)]
 
@@ -251,11 +251,13 @@ class VertexAIGeminiClient(GeminiClient):
 
     def __init__(self, **kwargs):
         """Uses the Google authentication mechanism for VertexAI in Google Cloud if no api_key is specified,
-        where project and location can also be passed as parameters. Service account key file can also be used.
-        If neither a service account key file, nor the api_key are passed, then the default credentials will be used,
-        which could be a personal account if the user is already authenticated in, like in Google Cloud Shell.
+        where project and location can also be passed as parameters. A previously created credentials object can be provided,
+        or a Service account key file can also be used. If neither a service account key file, credentials object,
+        nor the api_key are passed, then the default credentials will be used, which could be a personal account
+        if the user is already authenticated in, like in Google Cloud Shell.
 
         Args:
+            credentials (google.auth.credentials.Credentials): credentials to be used for authentication.
             google_application_credentials (str): Path to the JSON service account key file of the service account.
             Alternatively, the GOOGLE_APPLICATION_CREDENTIALS environment variable
             can also be set instead of using this argument.
