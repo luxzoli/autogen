@@ -45,7 +45,7 @@ import google.generativeai as genai
 import requests
 import vertexai
 from google.ai.generativelanguage import Content, Part
-from google.api_core.exceptions import InternalServerError
+from google.api_core.exceptions import InternalServerError, ResourceExhausted
 from google.auth.credentials import Credentials
 from openai.types.chat import ChatCompletion
 from openai.types.chat.chat_completion import ChatCompletionMessage, Choice
@@ -233,6 +233,9 @@ class GeminiClient:
                         UserWarning,
                     )
                     time.sleep(retry_delay)
+                except ResourceExhausted:
+                    logger.info("Gemini quota has been exhausted... Sleeping 60 seconds...")
+                    time.sleep(60)
                 except IndexError:
                     warnings.warn(
                         f"IndexError occurs when Gemini's chat model returns an empty response. Retry in {retry_delay} seconds...",
