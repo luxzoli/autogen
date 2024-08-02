@@ -5,7 +5,7 @@ import pytest
 
 try:
     import google.auth
-    from google.api_core.exceptions import InternalServerError
+    from google.api_core.exceptions import InternalServerError, ResourceExhausted
     from google.auth.credentials import Credentials
     from google.cloud.aiplatform.initializer import global_config as vertexai_global_config
     from vertexai.generative_models import HarmBlockThreshold as VertexAIHarmBlockThreshold
@@ -22,6 +22,7 @@ except ImportError:
     VertexAISafetySetting = object
     vertexai_global_config = object
     InternalServerError = object
+    ResourceExhausted = object
     skip = True
 
 
@@ -288,6 +289,41 @@ def test_index_error_retry(mock_init, mock_generative_model, gemini_client_with_
     # Setup the mock to return a mocked chat responses
     mock_chat.send_message.side_effect = [
         MagicMock(history=[MagicMock(parts=[])]),
+        MagicMock(history=[MagicMock(parts=[MagicMock(text="Example response")])]),
+    ]
+
+    # Call the create method
+    response = gemini_client_with_credentials.create(
+        {"model": "gemini-pro", "messages": [{"content": "Hello", "role": "user"}], "stream": False}
+    )
+
+    # Assertions to check if response is structured as expected
+    assert response.choices[0].message.content == "Example response", "Response content should match expected output"
+
+
+# Test error handling
+@pytest.mark.skipif(skip, reason="Google GenAI dependency is not installed")
+@patch("autogen.oai.gemini.GenerativeModel")
+@patch("autogen.oai.gemini.vertexai.init")
+def test_resource_exhausted_error_retry(mock_init, mock_generative_model, gemini_client_with_credentials):
+    # Mock the genai model configuration and creation process
+    mock_chat = MagicMock()
+    mock_model = MagicMock()
+    mock_init.return_value = None
+    mock_generative_model.return_value = mock_model
+    mock_model.start_chat.return_value = mock_chat
+
+    # Set up a mock for the chat history item access and the text attribute return
+    mock_history_part = MagicMock()
+    mock_history_part.text = "Example response"
+    mock_chat.history.__getitem__.return_value.parts.__getitem__.side_effect = [
+        ResourceExhausted("Test error"),
+        mock_history_part,
+    ]
+
+    # Setup the mock to return a mocked chat responses
+    mock_chat.send_message.side_effect = [
+        None,
         MagicMock(history=[MagicMock(parts=[MagicMock(text="Example response")])]),
     ]
 
