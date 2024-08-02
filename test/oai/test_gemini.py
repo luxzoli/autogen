@@ -265,6 +265,41 @@ def test_internal_server_error_retry(mock_genai, gemini_client):
         assert response == "Retried Successfully", "Should retry on InternalServerError"
 
 
+# Test error handling
+@pytest.mark.skipif(skip, reason="Google GenAI dependency is not installed")
+@patch("autogen.oai.gemini.GenerativeModel")
+@patch("autogen.oai.gemini.vertexai.init")
+def test_index_error_retry(mock_init, mock_generative_model, gemini_client_with_credentials):
+    # Mock the genai model configuration and creation process
+    mock_chat = MagicMock()
+    mock_model = MagicMock()
+    mock_init.return_value = None
+    mock_generative_model.return_value = mock_model
+    mock_model.start_chat.return_value = mock_chat
+
+    # Set up a mock for the chat history item access and the text attribute return
+    mock_history_part = MagicMock()
+    mock_history_part.text = "Example response"
+    mock_chat.history.__getitem__.return_value.parts.__getitem__.side_effect = [
+        IndexError("Test error"),
+        mock_history_part,
+    ]
+
+    # Setup the mock to return a mocked chat responses
+    mock_chat.send_message.side_effect = [
+        MagicMock(history=[MagicMock(parts=[])]),
+        MagicMock(history=[MagicMock(parts=[MagicMock(text="Example response")])]),
+    ]
+
+    # Call the create method
+    response = gemini_client_with_credentials.create(
+        {"model": "gemini-pro", "messages": [{"content": "Hello", "role": "user"}], "stream": False}
+    )
+
+    # Assertions to check if response is structured as expected
+    assert response.choices[0].message.content == "Example response", "Response content should match expected output"
+
+
 # Test cost calculation
 @pytest.mark.skipif(skip, reason="Google GenAI dependency is not installed")
 def test_cost_calculation(gemini_client, mock_response):

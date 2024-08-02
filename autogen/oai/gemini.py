@@ -218,24 +218,29 @@ class GeminiClient:
                 chat = model.start_chat(history=gemini_messages[:-1])
             max_retries = 5
             for attempt in range(max_retries):
+                retry_delay = 5 * (2**attempt)
                 ans = None
                 try:
                     response = chat.send_message(
                         gemini_messages[-1].parts, stream=stream, safety_settings=safety_settings
                     )
-                except InternalServerError:
-                    delay = 5 * (2**attempt)
-                    warnings.warn(
-                        f"InternalServerError `500` occurs when calling Gemini's chat model. Retry in {delay} seconds...",
-                        UserWarning,
-                    )
-                    time.sleep(delay)
-                except Exception as e:
-                    raise RuntimeError(f"Google GenAI exception occurred while calling Gemini API: {e}")
-                else:
                     # `ans = response.text` is unstable. Use the following code instead.
                     ans: str = chat.history[-1].parts[0].text
                     break
+                except InternalServerError:
+                    warnings.warn(
+                        f"InternalServerError `500` occurs when calling Gemini's chat model. Retry in {retry_delay} seconds...",
+                        UserWarning,
+                    )
+                    time.sleep(retry_delay)
+                except IndexError:
+                    warnings.warn(
+                        f"IndexError occurs when Gemini's chat model returns an empty response. Retry in {retry_delay} seconds...",
+                        UserWarning,
+                    )
+                    time.sleep(retry_delay)
+                except Exception as e:
+                    raise RuntimeError(f"Google GenAI exception occurred while calling Gemini API: {e}")
 
             if ans is None:
                 raise RuntimeError(f"Fail to get response from Google AI after retrying {attempt + 1} times.")
