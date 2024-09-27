@@ -1,0 +1,1 @@
+"use strict";(self.webpackChunkwebsite=self.webpackChunkwebsite||[]).push([[7482],{20781:s=>{s.exports=JSON.parse('{"label":"openai-assistant","permalink":"/autogen/blog/tags/openai-assistant","allTagsPath":"/autogen/blog/tags","count":1,"unlisted":false}')}}]);
